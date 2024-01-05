@@ -1,0 +1,1150 @@
+---
+title: "NYC & Toronto Motor Vehicle Collision Analysis"
+author: "Matthew Cihlar, Nomin Ganzorig, Samhita Vinay, Zi Wang"
+format:
+  pdf: default
+  html: default
+pdf-engine: xelatex
+editor: visual
+fontsize: 10pt
+geometry: margin=1in
+toc: true                   # add table of contents at the beginning
+toc-depth: 2                # Only titles that start with # or ##
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+## The following line is an overall configuration
+## asking that the R code is displayed.
+## Set to FALSE to avoid showing the code by default
+## (required for your final project, where you are not supposed
+##  to show code)
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+# Introduction
+
+The dataset that we selected contains entries of motor vehicle crashes in New York City from 2012 to 2023, and our supporting dataset was something similar but for Toronto in order to get an idea of similar data across different cities. Our motivation for selecting this data was determining what the main factors behind crashes in urban areas are and where officials tasked with preventing these accidents should funnel their resources. Our datasets are filled with precise geographical information about crash time, borough, zip code, latitude, and longitude in order to pinpoint the location of these crashes to determine where they occur most frequently. They also include the number of people injured and killed, number of pedestrians injured and killed, contributing factors of driver ability such as inattention and distracted driving, and vehicle type information to determine, after finding out where they occur, why they might have occurred. The Toronto dataset also had information about the visibility conditions at the time of the crash, which we believe should have an impact on whether or not a crash may occur. 
+
+Overall, this report seeks to explore the links between the frequency and lethality of these incidents and the various details we have outlined. We also know that COVID was a seriously disruptive event when it came to cars on the road, as fewer people were traveling, especially for work which in an urban environment is likely notable. We looked for evidence in our dataset for any abnormalities that might indicate that COVID or work from home was a significant factor in the number of crashes that occurred in these big cities. We also believe that factors such as the time of day or vehicle type involved may have a tangible impact on the result of the accidents, and much of our data analysis is built on probing the links between these phenomena. We hypothesized that crashes would be higher during the summer, as more people would be traveling, during the afternoon, as people return from work, and we also hypothesized that the main cause of these crashes was distracted driving. We made these hypotheses because we drive cars on a daily basis, so we are familiar with some conditions in which it is most unsafe to drive. We wanted to use these datasets as a point for confirming or clarifying our initial assumptions in order to make us and those we present to safer drivers.
+
+# Data Analysis & Visualization
+
+```{r message=FALSE, warning=FALSE, fig.width=10, fig.height = 5}
+library(knitr)
+library(RSQLite)
+
+if(file.exists("/Users/samhitavinay/Desktop/STAT405/crashes.db") == FALSE) {
+  dcon <- dbConnect(SQLite(), 
+                    dbname = "/Users/samhitavinay/Desktop/STAT405/crashes.db")
+  dbWriteTable(dcon, "crashes", read_csv("crashes.csv"))
+} else {
+  dcon <- dbConnect(SQLite(), 
+                    dbname = "/Users/samhitavinay/Desktop/STAT405/crashes.db")
+}
+```
+
+```{r message=FALSE, warning=FALSE, fig.width=10, fig.height = 5}
+res <- dbSendQuery(conn = dcon,
+"SELECT *
+FROM crashes;")
+overallquery <- dbFetch(res, -1)
+dbClearResult(res)
+```
+
+We wanted to investigate the distribution of crashes per day for each borough. This plot demonstrates the number of daily crashes by boroughs. Each dot in the plot represents the number of crashes that took place in the corresponding borough on a particular day. The darker the region is, the more observations fall into that level. We can see that Brooklyn have the most crashes per day on average while Staten Island has the least. This is likely due to the population density of each region, and also with the concentration of commuters and offices. This data falls in line with what one would expect from the more active and populous regions. One other noteworthy aspect is that while the average crashes per day for Bronx and Manhattan are similar, Bronx has a much smaller variance and range compared to Manhattan, which are on the same scale as Brooklyn and Queens. Population density and the number of cars on the road is likely extremely correlated with the number of crashes that would occur, and so this data should not be surprising and falls in line with what we had assumed would be the case. We also see that this is the case for Toronto, and both of our datasets seem to agree that population density is largely the most important factor when determining how many crashes might occur.
+
+```{r message=FALSE, warning=FALSE, fig.width=10, fig.height = 4.5}
+
+library(knitr)
+library(RSQLite)
+
+if(file.exists("/Users/samhitavinay/Desktop/STAT405/crashes.db") == FALSE) {
+  dcon <- dbConnect(SQLite(), 
+                    dbname = "/Users/samhitavinay/Desktop/STAT405/crashes.db")
+  dbWriteTable(dcon, "crashes", read_csv("crashes.csv"))
+  } else {
+  dcon <- dbConnect(SQLite(), 
+                    dbname = "/Users/samhitavinay/Desktop/STAT405/crashes.db")
+  }
+
+library(dplyr)
+library(ggplot2)
+
+res <- dbSendQuery(conn = dcon,
+"SELECT `CRASH.DATE`, BOROUGH, COUNT(BOROUGH)
+FROM crashes
+WHERE BOROUGH != ''
+GROUP BY `CRASH.DATE`, BOROUGH;")
+data <- dbFetch(res, -1)
+dbClearResult(res)
+
+ggplot(data) +
+  aes(BOROUGH, `COUNT(BOROUGH)`, alpha = I(1/15)) +
+  geom_jitter() +
+  labs(title = "Distribution of Daily Crashes by Borough",
+       x = "Borough",
+       y = "Number of Crashes") +
+  theme(plot.title = element_text(hjust = 0.5, face="bold")) + 
+  theme(axis.text.x=element_text(colour="black")) + 
+  theme(axis.text.y=element_text(colour="black"))
+```
+
+*Figure 1*. Crashes per day distributed for each of the 5 boroughs of NYC, with Bronx & Staten Island being the most concentrated and Manhattan, Brooklyn, & Queens being more sparse.
+
+```{r message=FALSE, warning=FALSE, fig.width=10, fig.height = 4.5}
+library(knitr)
+library(RSQLite)
+
+if(file.exists("/Users/samhitavinay/Desktop/STAT405/toronto.db") == FALSE) {
+  dcon <- dbConnect(SQLite(), 
+                    dbname = "/Users/samhitavinay/Desktop/STAT405/toronto.db")
+  dbWriteTable(dcon, "toronto", read.csv("toronto.csv"))
+} else {
+  dcon <- dbConnect(SQLite(), 
+                    dbname = "/Users/samhitavinay/Desktop/STAT405/toronto.db")
+}
+
+library(dplyr)
+library(ggplot2)
+
+res <- dbSendQuery(conn = dcon,
+"SELECT `DATE`, DISTRICT, COUNT(DISTRICT)
+FROM toronto
+WHERE DISTRICT != 'None' AND DISTRICT != 'Toronto East York'
+GROUP BY `DATE`, DISTRICT;")
+data <- dbFetch(res, -1)
+dbClearResult(res)
+
+ggplot(data) +
+  aes(DISTRICT, `COUNT(DISTRICT)`, alpha = I(1/15)) +
+  geom_jitter() +
+  labs(title = "Distribution of Daily Crashes by District",
+       x = "District",
+       y = "Number of Crashes") +
+  theme(plot.title = element_text(hjust = 0.5, face="bold")) + 
+  theme(axis.text.x=element_text(colour="black")) + 
+  theme(axis.text.y=element_text(colour="black"))
+```
+
+*Figure 2*. Crashes per day distributed for each of the 5 districts of Toronto, with Toronto & East York having the most crashes. Overall, crashes were more sparse than those in NYC.
+
+We also wanted to investigate location at a more granular level, so we investigated zip code of the New York City crash data. More specifically, we looked at the change over time in crashes from 2012 to 2023 in different zip codes. Because there were too many zip codes, we captured the top 10 changes and noticed a decrease in the number of crashes for all the changes in the corresponding zip codes. This data will be helpful when thinking about mapping the crashes. From this data, we can better understand more granularly where these crashes occur and why they might appear in these places. Because these zip codes are the most densely populated, we also figured that COVID likely had a role in their decline, along with the increase in remote tech work and other work from home setups. The data suggests that the fewer cars on the road, the fewer crashes occur, which is of course what one would expect. Furthermore, it is important to note which zip codes had a more dramatic variation from before, during, and after the COVID period. Again, because we are looking at densely populated zip codes, the evidence suggests that people are simply moving around far less in these populated areas, and that they are not returning to the peak travelling that they were engaged in prior to COVID. This enables us to conclude that there is likely a correlation between the number of the crashes and how prolific work from home is, and by tracking work from home (which is likely common in these densely populated areas) we could track how many crashes are expected to occur.
+
+```{r message=FALSE, warning=FALSE, fig.width=10, fig.height = 5}
+library(ggalt)
+library(ggplot2)
+library(knitr)
+library(RSQLite)
+
+if(file.exists("/Users/samhitavinay/Desktop/STAT405/crashes.db") == FALSE) {
+  dcon <- dbConnect(SQLite(), 
+                    dbname = "/Users/samhitavinay/Desktop/STAT405/crashes.db")
+  dbWriteTable(dcon, "crashes", read_csv("crashes.csv"))
+  } else {
+  dcon <- dbConnect(SQLite(), 
+                    dbname = "/Users/samhitavinay/Desktop/STAT405/crashes.db")
+  }
+
+
+# Percent change in crashes by zip code from 2012-2023
+res <- dbSendQuery(conn = dcon,
+"SELECT SUBSTR(`CRASH.DATE`, 7, 11) as YEAR, `ZIP.CODE`
+FROM crashes
+WHERE `ZIP.CODE` is not null and (YEAR LIKE '%2012' or YEAR LIKE '%2023');")
+data <- dbFetch(res, -1)
+dbClearResult(res)
+
+counts <- as.data.frame.matrix(table(data$ZIP.CODE, data$YEAR))
+counts <- cbind(counts, ((counts$'2023' - counts$'2012')))
+colnames(counts) <- c('2012', '2023', 'Change')
+counts <- counts[order(counts$Change), ]
+counts <- head(counts, 10)
+
+x_start <- counts$'2012'
+x_end <- counts$'2023'
+
+gg <- ggplot(counts, aes(x = x_start, xend = x_end, y = row.names(counts), 
+                         group = row.names(counts))) + 
+  geom_dumbbell(color = "black", colour_x = "brown", colour_xend = "purple",
+              size_x = 2, size_xend = 2) + 
+  labs(title = "Top 10 Greatest Changes in Crashes by Zip Code from 2012 to 2023",
+       x = "Number of Crashes",
+       y = "Zip Code", color = "legend") + xlim(0, 1300) + 
+  theme(plot.title = element_text(hjust = 0.5, face="bold")) + 
+  geom_text(size = 3, hjust=-0.25, aes(x=x_start, label='2012')) +
+  geom_text(size = 3, hjust=1.25, aes(x=x_end, label='2023'))
+
+gg
+```
+
+*Figure 2.* The top 10 changes in the number of crashes by zip code from 2012 to 2023 (negative change for all 10 zip codes) in NYC. The brown dots represent the number of crashes in 2012, while the purple dots represent the number of crashes in 2023.
+
+Since the dataset contains the year in which crashes happened, so it is valuable to analyze the number of crashes per year as a trend line. The overall number of crashes in NYC seemed to peak during 2018, but has gone down since. As a result, the line of best fit is negatively sloping. Similar to the trend for each zip code, if we look at the overall trend within the city, we can see a similar pattern. We can then determine that the most likely cause of this effect is probably COVID and the increase in Work-From-Home jobs which obviously require less commute than traditional office jobs. Again, we see a similar pattern with the previous few plots. It is no surprise that COVID has had such an outsized impact on the number of crashes because it is simply the case fewer people are traveling, and therefore fewer people are getting into car crashes. We see something similar for Toronto. Notably, the downtrend continues, and has not returned to its previous levels. We do not suspect that COVID has suddenly caused people to become better drivers, but rather than there are still fewer cars on the road. Data about the number of cars on the road at any given time would have allowed us to draw conclusions about the skills of the drivers on the road before, during, and after COVID, which could have been particularly interesting.
+
+```{r message=FALSE, warning=FALSE, fig.width=10, fig.height = 5}
+library(knitr)
+library(RSQLite)
+
+if(file.exists("/Users/samhitavinay/Desktop/STAT405/crashes.db") == FALSE) {
+  dcon <- dbConnect(SQLite(), 
+                    dbname = "/Users/samhitavinay/Desktop/STAT405/crashes.db")
+  dbWriteTable(dcon, "crashes", read_csv("crashes.csv"))
+  } else {
+  dcon <- dbConnect(SQLite(), 
+                    dbname = "/Users/samhitavinay/Desktop/STAT405/crashes.db")
+  }
+  
+res <- dbSendQuery(conn = dcon,
+"SELECT SUBSTR(`CRASH.DATE`, 7, 11) as YEAR, COUNT(*) as COUNT
+FROM crashes
+GROUP BY YEAR;")
+crashes_data <- dbFetch(res, -1)
+dbClearResult(res)
+
+x <- as.numeric(crashes_data$YEAR)
+y <- as.numeric(crashes_data$COUNT)
+
+plot(x, y, type = 'o', main = "Crashes Per Year in NYC", xlab = "Year", 
+     ylab = "Number of Crashes", pch = 19, xaxt = "n")
+axis(1, at = seq(2012, 2023, by = 1))
+abline(lm(y ~ x), col="red")
+
+```
+
+*Figure 3.* The number of crashes for every year in New York City from 2012-2023 visualized using a line along with the line of best fit (in red).
+
+```{r message=FALSE, warning=FALSE, fig.width=10, fig.height = 5}
+library(knitr)
+library(RSQLite)
+
+if(file.exists("/Users/samhitavinay/Desktop/STAT405/toronto.db") == FALSE) {
+  dcon <- dbConnect(SQLite(), 
+                    dbname = "/Users/samhitavinay/Desktop/STAT405/toronto.db")
+  dbWriteTable(dcon, "toronto", read.csv("toronto.csv"))
+} else {
+  dcon <- dbConnect(SQLite(), 
+                    dbname = "/Users/samhitavinay/Desktop/STAT405/toronto.db")
+}
+
+res <- dbSendQuery(conn = dcon,
+"SELECT YEAR, COUNT(*) as COUNT
+FROM toronto
+GROUP BY YEAR;")
+crashes_data <- dbFetch(res, -1)
+dbClearResult(res)
+
+x <- as.numeric(crashes_data$YEAR)
+y <- as.numeric(crashes_data$COUNT)
+
+plot(x, y, type = 'o', main = "Crashes Per Year in Toronto", xlab = "Year", 
+     ylab = "Number of Crashes", pch = 19, xaxt="n")
+axis(1, at = seq(2006, 2022, by = 1))
+abline(lm(y ~ x), col="red")
+```
+
+*Figure 4.* The number of crashes for every year in Toronto from 2006-2022 visualized using a line along with the line of best fit (in red).
+
+We wanted to look more specifically at how the number of crashes trends through out the time horizon. To do so, we create a plot showing the number of crashes that take place for each month within the time span of the dataset. We can see that the number of crashes peaks from late 2016 to around late 2019, and then drastically declines at the start of 2020 potentially due to the advent of COVID-19, and then remains at a moderately low level. This is also the case for the Toronto dataset, though slightly less pronounced. We expect that the incomplete nature of the Toronto dataset had something to do with this, however, because we can still clearly extract this pattern from our incomplete dataset, we are more confident that this is a significantly important pattern and has a high degree of explanatory power.
+
+```{r message=FALSE, warning=FALSE, fig.width=10, fig.height = 5}
+
+library(knitr)
+library(RSQLite)
+
+if(file.exists("/Users/samhitavinay/Desktop/STAT405/crashes.db") == FALSE) {
+  dcon <- dbConnect(SQLite(), 
+                    dbname = "/Users/samhitavinay/Desktop/STAT405/crashes.db")
+  dbWriteTable(dcon, "crashes", read_csv("crashes.csv"))
+  } else {
+  dcon <- dbConnect(SQLite(), 
+                    dbname = "/Users/samhitavinay/Desktop/STAT405/crashes.db")
+  }
+
+library(ggplot2)
+library(lubridate)
+
+res <- dbSendQuery(conn = dcon,
+"SELECT SUBSTR(`CRASH.DATE`, 7, 4) || '-' || SUBSTR(`CRASH.DATE`, 1, 2) as DATE,
+SUBSTR(`CRASH.DATE`, 7, 4) as YEAR, SUBSTR(`CRASH.DATE`, 1, 2) as MONTH, COUNT(*) as COUNT
+FROM crashes
+GROUP BY YEAR, MONTH;")
+data <- dbFetch(res, -1)
+dbClearResult(res)
+
+label <- sapply(data$DATE, function(x){
+  if(substr(x, 6, 7) == "01") {  
+    return(substr(x, 1, 4))    
+  } else {
+    return("")
+  }})
+
+
+ggplot(data = data) + 
+  aes(x = DATE, y = COUNT, fill = as.numeric(MONTH)) +
+  geom_bar(stat = "identity") +  
+  scale_x_discrete(labels = label) +
+  labs(title = "Number of Crashes per Month",
+       x = "Month per Year",
+       y = "Number of Crashes") + 
+  theme(plot.title = element_text(hjust = 0.5, face="bold")) + 
+  guides(fill=guide_legend(title="Month")) + 
+  theme(axis.text.x=element_text(colour="black")) + 
+  theme(axis.text.y=element_text(colour="black"))
+```
+
+*Figure 5.* Bars with colors going from dark blue (January) to light blue (December), showing the distribution of crashes per month across time from 2012-2023 in NYC.
+
+```{r message=FALSE, warning=FALSE, fig.width=10, fig.height = 5}
+library(knitr)
+library(RSQLite)
+
+if(file.exists("/Users/samhitavinay/Desktop/STAT405/toronto.db") == FALSE) {
+  dcon <- dbConnect(SQLite(), 
+                    dbname = "/Users/samhitavinay/Desktop/STAT405/toronto.db")
+  dbWriteTable(dcon, "toronto", read.csv("toronto.csv"))
+} else {
+  dcon <- dbConnect(SQLite(), 
+                    dbname = "/Users/samhitavinay/Desktop/STAT405/toronto.db")
+}
+
+library(ggplot2)
+library(lubridate)
+
+res <- dbSendQuery(conn = dcon,
+"SELECT YEAR || '-' || SUBSTR(DATE, 0, CHARINDEX('/',DATE)) as DATE,
+YEAR, SUBSTR(DATE, 0, CHARINDEX('/',DATE)) as MONTH, COUNT(*) as COUNT
+FROM toronto
+GROUP BY YEAR, MONTH;")
+data <- dbFetch(res, -1)
+dbClearResult(res)
+
+test <- (data$DATE)
+label <- sapply(data$DATE, function(x){
+  if(substr(x, 6, 7) == "1" & substr(x, 1, 4) != "2006") {  
+    return(substr(x, 1, 4))    
+  } else {
+    return("")
+  }})
+
+
+ggplot(data = data) + 
+  aes(x = DATE, y = COUNT, fill = as.numeric(MONTH)) +
+  geom_bar(stat = "identity") +  
+  scale_x_discrete(labels = label) +
+  labs(title = "Number of Crashes per Month",
+       x = "Month per Year",
+       y = "Number of Crashes") + 
+  theme(plot.title = element_text(hjust = 0.5, face="bold")) + 
+  guides(fill=guide_legend(title="Month")) +
+  theme(axis.text.x=element_text(colour="black")) + 
+  theme(axis.text.y=element_text(colour="black"))
+```
+
+*Figure 6.* Bars with colors going from dark blue (January) to light blue (December), showing the distribution of crashes per month across time from 2006-2022 in Toronto.
+
+We then wanted to combine the comparisons by borough and by time. Therefore, we made a stacked bar graph displaying these factors. We found that for all boroughs, crashes peak at around hour 15, while they are the lowest at around hour 4. This makes intuitive sense, since we would expect 3pm to be among the busiest times, as this is when people are getting off work and need to travel between their homes and the offices. Further, we would expect the early morning to have relatively few crashes, since relatively few people would be on the road during these times. This falls into line with much of our previous data. Moreover, Brooklyn and Queens had the highest number of crashes overall, while Staten Island had the lowest number of crashes, which again we saw earlier. This is more evidence for the work from home trend having an outsized effect on our data. Because fewer people are traveling to and from work, these peaks are smoothed, and hence there is less of a "rush hour" risk and fewer crashes at this time. Because we are able to determine that this rush hour period greatly increases the number of crashes on the road, we would naturally expect the reduction of the rush hour effect from the reduction of people returning from work, and as such this data provides further evidence for our hypotheses.
+
+```{r message=FALSE, warning=FALSE, fig.width=10, fig.height = 5}
+library(knitr)
+library(RSQLite)
+
+if(file.exists("/Users/samhitavinay/Desktop/STAT405/crashes.db") == FALSE) {
+  dcon <- dbConnect(SQLite(), 
+                    dbname = "/Users/samhitavinay/Desktop/STAT405/crashes.db")
+  dbWriteTable(dcon, "crashes", read_csv("crashes.csv"))
+  } else {
+  dcon <- dbConnect(SQLite(), 
+                    dbname = "/Users/samhitavinay/Desktop/STAT405/crashes.db")
+  }
+
+library(ggplot2)
+library(dplyr) #formatting the data by creating a new cols 
+
+res <- dbSendQuery(conn = dcon,
+"SELECT CAST(SUBSTR(`CRASH.TIME`, 1, CHARINDEX(':', `CRASH.TIME`)) AS INTEGER) AS HOUR, 
+`NUMBER.OF.PERSONS.KILLED`, BOROUGH, COUNT(*) as COUNT
+FROM crashes
+WHERE `NUMBER.OF.PERSONS.KILLED` < 3 AND BOROUGH != ''
+GROUP BY HOUR, BOROUGH;")
+data <- dbFetch(res, -1)
+dbClearResult(res)
+
+ggplot(data, aes(x = HOUR, y = as.numeric(COUNT), color=BOROUGH, fill= BOROUGH)) +
+  geom_col(position = position_stack()) +
+  scale_fill_manual(values = c("#FFD4DD", "#E0CCA4", "#D9F4B3","#97DED2","#C3BFFF" )) +
+  labs(title = "People Killed per Hour of the Day at Each Borough",
+       x = "Hour",
+       y = "Number of People Killed") +
+  theme(plot.title = element_text(hjust = 0.5, face='bold')) + 
+  theme(axis.text.x=element_text(colour="black")) + 
+  theme(axis.text.y=element_text(colour="black"))
+```
+
+*Figure 7*. A stacked bar plot showing the number of crashes per hour of day for each borough of NYC. Pink represents the Bronx, brown represents Brooklyn, green represents Manhattan, blue represents Queens, and purple represents Staten Island.
+
+Text mining is another technique that can be used in R to extract important information from data. In the New York City dataset, an interesting aspect that could be investigated through text mining was the type of road that the crash occurred on. Of course, crashes vary depending on factors such as road size, location, and busyness, and we wanted to investigate this by taking a look at whether the road was a street, avenue, ramp, etc. As shown in the plot below, avenues were where the most crashes took place, followed by street, boulevard, parkway, expressway, and road. This somewhat contradicts the notion that most crashes take place on large roads, since avenues are often mid-sized. Streets were not too far behind avenues, and this supports the conjecture that most crashes happened on mid-sized roads. Expressways and parkways, which are larger roads, had far fewer crashes than the aforementioned mid-sized roads. Perhaps this occurs because drivers do not take mid-sized roads as seriously as highways, causing them to forget certain safety precautions while driving. Much more analysis would have to be done when analyzing why certain roads are more prone to crashes than others, as this could have something to do with road quality, where in the city they are located, etc. that were not in this dataset.
+
+```{r message=FALSE, warning=FALSE, fig.width=5, fig.height = 3}
+library(stringr)
+
+roads <- str_extract(overallquery$ON.STREET.NAME, "\\w+$")
+roads <- str_to_lower(roads)
+roads <- str_replace_all(roads, "\\d+", "")
+frequencies <- head(sort(table(roads), decreasing = TRUE))
+
+freqs <- as.data.frame(frequencies)
+par(mar = c(0, 8, 0.7, 3))
+pie(freqs$Freq, labels = freqs$roads, main = "Crash Frequency on Roads")
+```
+
+*Figure 8*. A pie chart displaying the relative frequencies of crashes occurring on different types of roads of NYC, obtained by text mining of the data.
+
+We can also investigate the underlying causes of crashes individually, perhaps giving us insight into what specifically causes crashes on different roads. In this plot, we can view which vehicle types are involved in the most amount of crashes. Largely, this data falls in line with the proportion of vehicle types that are already on the road, as sedans are the most common vehicle, and so forth. We would need more data to check whether or not there is a link between a certain type of car and crashes, as from this we haven't found much evidence that one is skewed more than the other.
+
+```{r message=FALSE, warning=FALSE, fig.height = 5, fig.width = 10}
+
+df <- data.frame(
+  car_names = c ("Sedan", "Station Wagon", "Passenger Car", "Sport Utility Car", "Taxi", "Pick-up Truck", "Van", "Box Truck"),
+  frequencies =c( 554583+40162,   436589 , 416206,180291, 50181+31911,33551, 25266, 23571 )
+)
+
+df$stringformatted <- str_replace(df$car_names, " ", "-")
+
+par(mar = c(6, 6, 5, 6))  # Adjust the values as needed
+par(mgp = c(4.3, 0.5, 0)) 
+par(font.axis = 3)
+barplot(df$frequencies, names.arg = df$stringformatted, las = 2, cex.names = 0.7, col= "#D9F4B3",
+        main ="Number of Crashes vs. Vehicle Type", ylab = "Number of Crashes", yaxt = 'n')
+title(xlab = "Vehicle Type", line = 5) 
+axis(2,cex.axis=0.7, las = 2)
+```
+
+*Figure 9.* Barplot demonstrating the number of crashes per day for each vehicle type, sorted from highest number of crashes (left) to the lowest number of crashes (right).
+
+There were also behaviors listed as being the cause of each crash. The majority of these come down to user error, so to speak, as driver inattention and other poor driving habits were far and away the most common cause of a crash. Notably, mechanical failure or any other external factor did not play a large role in these crashes, which some may expect, but the cause of crashes almost universally comes down to human error in one way or another. Whether it be texting or any other distraction, crashes seem to increasingly be a result of poor driving over anything else. This could also explain the rush hour phenomenon. When people are stuck in traffic, it is not uncommon for them to take out their phones and check their emails or send some texts, and as we see from this data, this is incredibly harmful and an extremely important factor in whether or not a crash occurs. Many of these separate factors are correlated and help to explain each other.
+
+```{r message=FALSE, warning=FALSE, fig.width=10, fig.height = 5}
+
+if(file.exists("/Users/samhitavinay/Desktop/STAT405/crashes.db") == FALSE) {
+  dcon <- dbConnect(SQLite(), 
+                    dbname = "/Users/samhitavinay/Desktop/STAT405/crashes.db")
+  dbWriteTable(dcon, "crashes", read_csv("crashes.csv"))
+  } else {
+  dcon <- dbConnect(SQLite(), 
+                    dbname = "/Users/samhitavinay/Desktop/STAT405/crashes.db")
+  }
+
+res <- dbSendQuery(conn = dcon,
+"SELECT `CONTRIBUTING.FACTOR.VEHICLE.1` as FACTOR
+FROM crashes
+WHERE FACTOR != 'Unspecified' AND FACTOR != '' AND FACTOR != '1' AND FACTOR != '80';")
+data <- dbFetch(res, -1)
+dbClearResult(res)
+
+cont_factors <- data$FACTOR
+uniq_types <-c(unique(cont_factors))
+sorted2<-sort(table(cont_factors), decreasing=TRUE)
+sorted<- rev(head(sorted2, 10))
+
+dotchart(sorted, main ="Top Contributing Factors of Crashes", xlab= "Crash Frequency", ylab = "Crash Factors", cex.names = 0.3)
+```
+
+*Figure 10.* A dotplot displaying the crash frequency for each factor causing the crash, sorted from lowest frequency (bottom) to highest frequency (top).
+
+From this graph, we can examine how the visibility conditions at the time of the crash affect the likelihood of a crash occurring. We would expect darker and foggier atmospheres to have an increased likelihood of crashes, and we see this reflected in the data. Rainier conditions also have a large cluster, which makes sense. However, we were surprised that snowier conditions did not have even more of a representation than they already do, given that Toronto is in Canada. Again, we wish we could have seen a more complete Toronto data set to further highlight these disparities, but however, we can still extract this theme from the dataset, as we would expect this general trends to scale with the dataset. This still falls in line with what we would expect from our hypotheses.
+
+```{r message=FALSE, warning=FALSE, fig.width=10, fig.height = 5}
+library(knitr)
+library(RSQLite)
+
+if(file.exists("/Users/samhitavinay/Desktop/STAT405/toronto.db") == FALSE) {
+  dcon <- dbConnect(SQLite(), 
+                    dbname = "/Users/samhitavinay/Desktop/STAT405/toronto.db")
+  dbWriteTable(dcon, "toronto", read.csv("toronto.csv"))
+} else {
+  dcon <- dbConnect(SQLite(), 
+                    dbname = "/Users/samhitavinay/Desktop/STAT405/toronto.db")
+}
+
+library(ggplot2)
+
+res <- dbSendQuery(conn = dcon,
+"SELECT VISIBILITY, LIGHT 
+FROM toronto
+WHERE LIGHT != 'Other' AND VISIBILITY != 'Other' AND VISIBILITY != 'None' AND LIGHT NOT LIKE '%artificial%';")
+data <- dbFetch(res, -1)
+dbClearResult(res)
+
+ggplot(data) + aes(x = VISIBILITY, y = LIGHT, color = LIGHT) + 
+  geom_point() + 
+  geom_jitter(width = 0.5, height = 0.3) + theme(legend.position="none") + 
+  labs(title = "Number of Crashes per Light-Visibility Combination in Toronto",
+       x = "Visibility Level",
+       y = "Light Level") + 
+  theme(plot.title = element_text(hjust = 0.5, face='bold')) + 
+  theme(axis.text.x=element_text(colour="black")) + 
+  theme(axis.text.y=element_text(colour="black"))
+```
+
+*Figure 11*. This plot shows the distribution of crashes in Toronto by light and visibility conditions. More dots centered around a particular condition pair demonstrates a greater density of crashes occurring in that pair of conditions.
+
+Also, we can analyze the injuries per month that are caused by the top four contributing factors of crashes, respectively. Each of the factors corresponds to a different color in the plot. What we can derive from the plot is that the number of crashes caused by "Driver Inattention/Distraction" per month tends to vary largely by time, while the number of crashes caused by "Backing Unsafely" per month varies the least. The general trends of the number of crashes per month caused by each of the factors are all similar, which means that proportion of crashes caused by one factor with respect to any other factors is relatively stable throughout the time span. This provides good evidence that the proportion of causes of the underlying crashes are not random and the few at the top are indeed more harmful than the others.
+
+```{r message=FALSE, warning=FALSE, fig.width=10, fig.height = 4.5}
+library(knitr)
+library(RSQLite)
+
+if(file.exists("/Users/samhitavinay/Desktop/STAT405/crashes.db") == FALSE) {
+  dcon <- dbConnect(SQLite(), 
+                    dbname = "/Users/samhitavinay/Desktop/STAT405/crashes.db")
+  dbWriteTable(dcon, "crashes", read_csv("crashes.csv"))
+  } else {
+  dcon <- dbConnect(SQLite(), 
+                    dbname = "/Users/samhitavinay/Desktop/STAT405/crashes.db")
+  }
+
+library(ggplot2)
+library(dplyr)
+
+top.factors <- c('Driver Inattention/Distraction', 
+                 'Failure to Yield Right-of-Way', 
+                 'Following Too Closely',
+                 'Backing Unsafely')
+
+res <- dbSendQuery(conn = dcon,
+"SELECT SUBSTR(`CRASH.DATE`, 7, 4) || '-' || SUBSTR(`CRASH.DATE`, 1, 2) as DATE, 
+`CONTRIBUTING.FACTOR.VEHICLE.1` as FACTOR, `NUMBER.OF.PERSONS.INJURED`, 
+SUM(`NUMBER.OF.PERSONS.INJURED`) as COUNT
+FROM crashes
+WHERE (FACTOR = 'Driver Inattention/Distraction' OR FACTOR = 'Failure to Yield Right-of-Way'
+OR FACTOR = 'Following Too Closely' OR FACTOR = 'Backing Unsafely')
+AND `NUMBER.OF.PERSONS.INJURED` is not null
+GROUP BY DATE, FACTOR;")
+data <- dbFetch(res, -1)
+dbClearResult(res)
+
+label <- sapply(data$DATE, function(x){
+  if(substr(x, 6, 7) == "01") {  
+    return(substr(x, 1, 4))    
+  } else {
+    return("")
+  }})
+
+ggplot(data) +
+  aes(x = DATE, y = COUNT, 
+      color = FACTOR) +
+  geom_point() +
+  scale_x_discrete(labels = label) +
+  labs(title = "Injuries per Month by Factor in NYC",
+       x = "Month per Year",
+       y = "Total Injuries") + 
+  theme(plot.title = element_text(hjust = 0.5, face='bold')) + 
+  theme(legend.position=c(.1,.75), legend.key.width = unit(0.05, "cm"), 
+        legend.text=element_text(size=8), legend.title=element_text(size=10)) + theme(axis.text.x=element_text(colour="black")) + 
+  theme(axis.text.y=element_text(colour="black"))
+
+```
+
+*Figure 12.* This plot shows the distribution of causes of injuries to the injuries themselves over time. Green dots represent driver inattention/distraction, teal dots represent failure to yield right-of-way, purple dots represent following too closely, and salmon dots represent backing unsafely.
+
+Overall, in order to visualize the most impactful factors that our analysis produced, we generated killer plots for both the New York City and Toronto datasets. The plots showcase the top three contributors to each of five factors of the New York City and Toronto datasets. The plot resembles a traffic light, which makes sense given that our datasets are about vehicle crashes. Moreover, the red circles are generally bigger than the yellow and green circles, and this is because the factors in red circles are the highest contributors to crashes, followed by yellow, then green. The circles are different sizes according to their relative percentages, symbolizing the relative impact of each specific factor. The plot for New York City demonstrates that most crashes happen due to Driver Inattention, in Brooklyn, and with Sedans. Also, the plot for Toronto shows that the most crashes happen in automobiles/sedans, in the district of Toronto & East York, and due to not yielding. *Note: in the presentation, there were Shiny sliders and dropdowns that allowed the user to focus in on different factors and toggle between the New York City and Toronto plots respectively.*
+
+```{r message=FALSE, warning=FALSE}
+library(knitr)
+library(RSQLite)
+library(grid)
+library(DBI)
+library(readr)
+library(shiny)
+library(dplyr)
+
+draw <- function(x, y, size, color) {
+  grid.circle(x, y, r = unit(size*0.25, "npc"), 
+              gp = gpar(fill = color, alpha = 0.58,
+                        col = "black", lwd = 2))
+}
+
+draw2 <- function(x, y, size, color) {
+  grid.circle(x, y, r = unit(sqrt(size)*0.125, "npc"), 
+              gp = gpar(fill = color, alpha = 0.58,
+                        col = "black", lwd = 2))
+}
+
+draw_arrow <- function(x_start, y_start, x_end, y_end) {
+  grid.lines(x = c(x_start, x_end), y = c(y_start, y_end), 
+             arrow = arrow(type = "open", ends = "last", angle = 30, length = unit(0.02, "npc")), 
+             gp = gpar(col = "black", lwd = 2))
+}
+
+if(file.exists("/Users/samhitavinay/Desktop/STAT405/crashes.db") == FALSE) {
+  dcon <- dbConnect(SQLite(), 
+                    dbname = "/Users/samhitavinay/Desktop/STAT405/crashes.db")
+  dbWriteTable(dcon, "crashes", read_csv("crashes.csv"))
+  } else {
+  dcon <- dbConnect(SQLite(), 
+                    dbname = "/Users/samhitavinay/Desktop/STAT405/crashes.db")
+  }
+
+## time of day
+res <- dbSendQuery(conn = dcon,
+                   "SELECT CAST(SUBSTR(`CRASH.TIME`, 1, CHARINDEX(':', `CRASH.TIME`)) AS INTEGER) AS HOUR, 
+`NUMBER.OF.PERSONS.KILLED`, COUNT(*) as COUNT
+FROM crashes
+GROUP BY HOUR
+ORDER BY COUNT DESC;")
+
+data <- dbFetch(res, -1)
+dbClearResult(res)
+
+time_of_day <- data[,-2]
+time_of_day$perc <- time_of_day$COUNT / sum(time_of_day$COUNT)
+time_of_day <- time_of_day[,-2]
+time_of_day <- head(time_of_day,3)
+colnames(time_of_day)[1] <- "factor"
+time_of_day$factor <- as.character(time_of_day$factor)
+
+## month
+library(lubridate)
+
+res <- dbSendQuery(conn = dcon,
+                   "SELECT SUBSTR(`CRASH.DATE`, 1, 2) as MONTH, COUNT(*) as COUNT
+FROM crashes
+GROUP BY MONTH
+ORDER BY COUNT DESC;")
+data <- dbFetch(res, -1)
+dbClearResult(res)
+
+month <- data
+month$perc <- month$COUNT / sum(month$COUNT)
+month <- month[,-2]
+month <- head(month,3)
+colnames(month)[1] <- "factor"
+month$factor <- as.character(month$factor)
+
+## borough
+res <- dbSendQuery(conn = dcon,
+                   "SELECT BOROUGH, COUNT(*) as COUNT
+FROM crashes
+WHERE BOROUGH != ''
+GROUP BY BOROUGH
+ORDER BY COUNT DESC;")
+data <- dbFetch(res, -1)
+dbClearResult(res)
+
+borough <- data
+borough$perc <- borough$COUNT / sum(borough$COUNT)
+borough <- borough[,-2]
+borough <- head(borough,3)
+colnames(borough)[1] <- "factor"
+borough$factor <- as.character(borough$factor)
+
+## contributing factor
+res <- dbSendQuery(conn = dcon,
+                   "SELECT `CONTRIBUTING.FACTOR.VEHICLE.1` as FACTOR
+FROM crashes
+WHERE FACTOR != 'Unspecified' AND FACTOR != '' AND FACTOR != '1' AND FACTOR != '80';")
+data <- dbFetch(res, -1)
+
+dbClearResult(res)
+
+cont_factors <- data$FACTOR
+cont_factors <- sort(table(cont_factors), decreasing=TRUE)
+cont_factors <- as.data.frame(cont_factors)
+cont_factors$perc <- cont_factors$Freq/dim(data)[1]
+cont_factors <- cont_factors[, -2]
+cont_factors <- head(cont_factors, 3)
+colnames(cont_factors)[1] <- "factor"
+cont_factors$factor <- as.character(cont_factors$factor)
+
+## vehicle type
+res <- dbSendQuery(conn = dcon,
+                   "SELECT `VEHICLE.TYPE.CODE.1` as TYPE
+FROM crashes
+WHERE TYPE != 'Unspecified' AND TYPE != '';")
+data <- dbFetch(res, -1)
+dbClearResult(res)
+
+type <- data$TYPE
+type <- sort(table(type), decreasing=TRUE)
+type <- as.data.frame(type)
+type$perc <- type$Freq/dim(data)[1]
+type <- type[, -2]
+type <- head(type, 3)
+colnames(type)[1] <- "factor"
+type$factor <- as.character(type$factor)
+
+data.NYC <- rbind(cont_factors,borough,type,month,
+                  time_of_day)
+
+if(file.exists("/Users/samhitavinay/Desktop/STAT405/toronto.db") == FALSE) {
+  dcon <- dbConnect(SQLite(), 
+                    dbname = "/Users/samhitavinay/Desktop/STAT405/toronto.db")
+  dbWriteTable(dcon, "crashes", read_csv("toronto.csv"))
+  } else {
+  dcon <- dbConnect(SQLite(), 
+                    dbname = "/Users/samhitavinay/Desktop/STAT405/toronto.db")
+  }
+
+## time of day
+res <- dbSendQuery(conn = dcon,
+                   "SELECT
+    CASE
+        WHEN LENGTH(TIME) = 4 THEN SUBSTR(TIME, 1, 2)
+        WHEN LENGTH(TIME) = 3 THEN SUBSTR('0' || TIME, 1, 2)
+        WHEN LENGTH(TIME) = 2 THEN '00'
+        WHEN LENGTH(TIME) = 1 THEN '00'
+    END AS hour, 
+COUNT(*) as COUNT
+FROM toronto
+GROUP BY HOUR
+ORDER BY COUNT DESC;")
+
+data <- dbFetch(res, -1)
+dbClearResult(res)
+
+time_of_day <- data
+time_of_day$perc <- time_of_day$COUNT / sum(time_of_day$COUNT)
+time_of_day <- time_of_day[,-2]
+time_of_day <- head(time_of_day,3)
+colnames(time_of_day)[1] <- "factor"
+time_of_day$factor <- as.character(time_of_day$factor)
+
+## month
+library(lubridate)
+
+res <- dbSendQuery(conn = dcon,
+                   "SELECT SUBSTR(DATE, 6, 2) as MONTH, COUNT(*) as COUNT
+FROM toronto
+GROUP BY MONTH
+ORDER BY COUNT DESC;")
+data <- dbFetch(res, -1)
+dbClearResult(res)
+
+month <- data
+month$perc <- month$COUNT / sum(month$COUNT)
+month <- month[,-2]
+month <- head(month,3)
+colnames(month)[1] <- "factor"
+month$factor <- as.character(month$factor)
+
+## borough
+res <- dbSendQuery(conn = dcon,
+                   "SELECT DISTRICT, COUNT(*) as COUNT
+FROM toronto
+WHERE DISTRICT != 'None'
+GROUP BY DISTRICT
+ORDER BY COUNT DESC;")
+data <- dbFetch(res, -1)
+data[1,2] <- data[1,2] + 4
+dbClearResult(res)
+
+borough <- data
+borough$perc <- borough$COUNT / sum(borough$COUNT)
+borough <- borough[,-2]
+borough <- head(borough,3)
+colnames(borough)[1] <- "factor"
+borough$factor <- as.character(borough$factor)
+
+## contributing factor
+res <- dbSendQuery(conn = dcon,
+                   "SELECT DRIVACT as FACTOR
+FROM toronto
+WHERE FACTOR != 'None' and FACTOR != 'Other' and FACTOR != 'Driving Properly'")
+data <- dbFetch(res, -1)
+dbClearResult(res)
+
+cont_factors <- data$FACTOR
+cont_factors <- sort(table(cont_factors), decreasing=TRUE)
+cont_factors <- as.data.frame(cont_factors)
+cont_factors$perc <- cont_factors$Freq/dim(data)[1]
+cont_factors <- cont_factors[, -2]
+cont_factors <- head(cont_factors, 3)
+colnames(cont_factors)[1] <- "factor"
+cont_factors$factor <- as.character(cont_factors$factor)
+
+## vehicle type
+res <- dbSendQuery(conn = dcon,
+                   "SELECT VEHTYPE as TYPE
+FROM toronto
+WHERE TYPE != 'None' AND TYPE != 'Other';")
+data <- dbFetch(res, -1)
+dbClearResult(res)
+
+type <- data$TYPE
+type <- sort(table(type), decreasing=TRUE)
+type <- as.data.frame(type)
+type$perc <- type$Freq/dim(data)[1]
+type <- type[, -2]
+type <- head(type, 3)
+colnames(type)[1] <- "factor"
+type$factor <- as.character(type$factor)
+
+data.TOR <- rbind(cont_factors,borough,type,month,
+                  time_of_day)
+
+data.total <- rbind(data.NYC, data.TOR)
+
+grid.newpage()
+    
+vp <- viewport(x = 0.4975, y = 0.5, width = 0.82)
+pushViewport(vp)
+      
+grid.rect(x = 0.4975, y = 0.5, width = 0.62, 
+          height = 0.96, gp = gpar(col = "black", lwd = 4,
+                                   fill = "lightgray"))
+grid.rect(x = 0.96, y = 0.5, width = 0.26, 
+          height = 0.25, gp = gpar(col = "black", lwd = 4,
+                                   fill = "lightgray"))
+grid.text("Legend:", x= 0.92, y = 0.59, just = "left",
+          gp = gpar(cex = 0.7))
+grid.rect(x = 0.86, y = 0.54, width = 0.01, 
+          height = 0.01, gp = gpar(col = "black", lwd = 1,
+                                   fill = "red"))
+grid.text("Highest Contributors", x= 0.87, y = 0.54, just = "left",
+          gp = gpar(cex = 0.5))
+grid.rect(x = 0.86, y = 0.49, width = 0.01, 
+          height = 0.01, gp = gpar(col = "black", lwd = 1,
+                                   fill = "yellow"))
+grid.text("2nd Highest Contributors", x= 0.87, y = 0.49, just = "left",
+          gp = gpar(cex = 0.5))
+grid.rect(x = 0.86, y = 0.44, width = 0.01, 
+          height = 0.01, gp = gpar(col = "black", lwd = 1,
+                                   fill = "green"))
+grid.text("3rd Highest Contributors", x= 0.87, y = 0.44, just = "left",
+          gp = gpar(cex = 0.5))
+draw(x = 0.46, 
+     y = 0.83, 
+     size = data.NYC$perc[1], color = "red")
+draw_arrow(0.38,0.85,0.46,0.83)
+grid.text("Driver\nInattention", x= 0.38, y = 0.85, just = "right")
+
+
+draw(x = 0.55, 
+     y = 0.73,
+     size = data.NYC$perc[4], color = "red")
+draw_arrow(0.63,0.73,0.55,0.73)
+grid.text("Brooklyn", x= 0.64, y = 0.73, just = "left")
+
+draw(x = 0.442, y = 0.69, 
+     size = data.NYC$perc[7], color = "red")
+draw_arrow(0.37,0.71,0.442,0.69)
+grid.text("Sedan", x= 0.36, y = 0.715, just = "right")
+
+draw(x = 0.535, y = 0.825, 
+     size = data.NYC$perc[10], color = "red")
+draw_arrow(0.575,0.84,0.535,0.825)
+grid.text("July", x= 0.58, y = 0.845, just = "left", gp = gpar(cex = 0.8))
+
+draw(x = 0.528, y = 0.863, 
+     size = data.NYC$perc[13], color = "red")
+draw_arrow(0.565,0.88,0.528,0.863)
+grid.text("16:00-17:00", x= 0.57, y = 0.885, just = "left", gp = gpar(cex = 0.8))
+
+draw(x = 0.4632, y = 0.473, 
+     size = data.NYC$perc[2], color = "yellow")
+draw_arrow(0.42,0.49,0.4632,0.473)
+grid.text("Failure to Yield\nRight-of-Way", x= 0.415, y = 0.49, 
+          just = "right", gp = gpar(cex = 0.8))
+
+draw(x = 0.53, y = 0.476, 
+     size = data.NYC$perc[5], color = "yellow")
+draw_arrow(0.6,0.476,0.53,0.476)
+grid.text("Queens", x= 0.61, y = 0.476, just = "left")
+
+draw(x = 0.46, y = 0.4, 
+     size = data.NYC$perc[8], color = "yellow")
+draw_arrow(0.4,0.38,0.46,0.4)
+grid.text("Station\nWagon", x= 0.39, y = 0.38, just = "right")
+
+draw(x = 0.517, y = 0.392, 
+     size = data.NYC$perc[11], color = "yellow")
+draw_arrow(0.55,0.392,0.517,0.392)
+grid.text("August", x= 0.555, y = 0.392, just = "left", gp = gpar(cex = 0.8))
+
+draw(x = 0.471, y = 0.512, 
+     size = data.NYC$perc[14], color = "yellow")
+draw_arrow(0.40,0.56,0.471,0.512)
+grid.text("17:00-18:00", x= 0.395, y = 0.567, just = "right",
+          gp = gpar(cex = 0.8))
+
+draw(x = 0.45, y = 0.147, 
+     size = data.NYC$perc[3], color = "green")
+draw_arrow(0.4,0.13,0.45,0.147)
+grid.text("Following too\nclosly", x= 0.395, y = 0.13, just = "right", gp = gpar(cex = 0.8))
+
+draw(x = 0.475, y = 0.215, 
+     size = data.NYC$perc[6], color = "green")
+draw_arrow(0.41,0.223,0.475,0.215)
+grid.text("Manhattan", x= 0.405, y = 0.23, just = "right")
+
+draw(x = 0.537, y = 0.145, 
+     size = data.NYC$perc[9], color = "green")
+draw_arrow(0.6,0.15,0.537,0.145)
+grid.text("Passenger\nVehicle", x= 0.6, y = 0.15, just = "left")
+
+draw(x = 0.482, y = 0.14, 
+     size = data.NYC$perc[12], color = "green")
+draw_arrow(0.46,0.1,0.482,0.14)
+grid.text("October", x= 0.46, y = 0.1, just = "top", gp = gpar(cex = 0.8))
+
+draw(x = 0.53, y = 0.211, 
+     size = data.NYC$perc[15], color = "green")
+draw_arrow(0.57,0.24,0.53,0.211)
+grid.text("14:00-15:00", x= 0.575, y = 0.245, just = "left", gp = gpar(cex = 0.8))
+
+```
+
+*Figure 13.* This plot shows the relative frequencies of the top three contributors of each of five factors for crashes in NYC. The red circles are the largest contributors, the yellow circles are the second largest contributors, and the green circles are the third largest contributors. The sizes of the circles are proportional to their relative impacts on crashes in NYC.
+
+```{r message=FALSE, warning=FALSE}
+# Toronto plot        
+grid.newpage()
+vp <- viewport(x = 0.525-0.0275, y = 0.505, width = 0.745)
+pushViewport(vp)
+grid.rect(x = 0.4975, y = 0.5, width = 0.72, 
+          height = 0.96, gp = gpar(col = "black", lwd = 4,
+                                   fill = "lightgray"))
+grid.rect(x = 1.02, y = 0.5, width = 0.275, 
+          height = 0.25, gp = gpar(col = "black", lwd = 4,
+                                   fill = "lightgray"))
+grid.text("Legend:", x= 0.97, y = 0.59, just = "left",
+          gp = gpar(cex = 0.7))
+grid.rect(x = 0.91, y = 0.54, width = 0.01, 
+          height = 0.01, gp = gpar(col = "black", lwd = 1,
+                                   fill = "red"))
+grid.text("Highest Contributors", x= 0.92, y = 0.54, just = "left",
+          gp = gpar(cex = 0.5))
+grid.rect(x = 0.91, y = 0.49, width = 0.01, 
+          height = 0.01, gp = gpar(col = "black", lwd = 1,
+                                   fill = "yellow"))
+grid.text("2nd Highest Contributors", x= 0.92, y = 0.49, just = "left",
+          gp = gpar(cex = 0.5))
+grid.rect(x = 0.91, y = 0.44, width = 0.01, 
+          height = 0.01, gp = gpar(col = "black", lwd = 1,
+                                   fill = "green"))
+grid.text("3rd Highest Contributors", x= 0.92, y = 0.44, just = "left",
+          gp = gpar(cex = 0.5))
+
+draw2(x = 0.57-0.0275, 
+     y = 0.85, 
+     size = data.TOR$perc[1], color = "red")
+draw_arrow(0.65-0.0275,0.87,0.57-0.0275,0.85)
+grid.text("Failed to Yield\nRight of Way", x= 0.65-0.0275, y = 0.87, just = "left",
+          gp = gpar(cex = 0.8))
+
+draw2(x = 0.575-0.0275, 
+     y = 0.705,
+     size = data.TOR$perc[4], color = "red")
+draw_arrow(0.655-0.0275,0.725,0.575-0.0275,0.705)
+grid.text("Toronto and\nEast York", x= 0.655-0.0275, y = 0.725, just = "left",
+          gp = gpar(cex = 0.8))
+
+draw2(x = 0.445-0.0275, y = 0.77, 
+     size = data.TOR$perc[7], color = "red")
+grid.text("Automobile/\nStation Wagon", x= 0.445-0.0275, y = 0.77, gp = gpar(cex = 0.8))
+
+draw2(x = 0.495-0.0275, y = 0.905, 
+     size = data.TOR$perc[10], color = "red")
+draw_arrow(0.435-0.0275,0.905,0.495-0.0275,0.905)
+grid.text("August", x= 0.43-0.0275, y = 0.905, just = "right", gp = gpar(cex = 0.8))
+
+draw2(x = 0.502-0.0275, y = 0.655, 
+     size = data.TOR$perc[13], color = "red")
+draw_arrow(0.45-0.0275,0.64,0.502-0.0275,0.655)
+grid.text("18:00-19:00", x= 0.445-0.0275, y = 0.64, just = "right", gp = gpar(cex = 0.8))
+
+draw2(x = 0.45-0.0275, y = 0.4, 
+     size = data.TOR$perc[2], color = "yellow")
+draw_arrow(0.39-0.0275,0.4,0.45-0.0275,0.4)
+grid.text("Lost Control", x= 0.385-0.0275, y = 0.4, 
+          just = "right", gp = gpar(cex = 0.8))
+
+draw2(x = 0.52-0.0275, y = 0.476, 
+     size = data.TOR$perc[5], color = "yellow")
+draw_arrow(0.59-0.0275,0.496,0.52-0.0275,0.476)
+grid.text("Etobicoke York", x= 0.595-0.0275, y = 0.5, just = "left",
+          gp = gpar(cex = 0.8))
+
+draw2(x = 0.447-0.0275, y = 0.495, 
+     size = data.TOR$perc[8], color = "yellow")
+draw_arrow(0.4-0.0275,0.495,0.447-0.0275,0.495)
+grid.text("Bicycle", x= 0.395-0.0275, y = 0.495, just = "right",
+          gp = gpar(cex = 0.8))
+
+draw2(x = 0.525-0.0275, y = 0.378, 
+     size = data.TOR$perc[11], color = "yellow")
+draw_arrow(0.6-0.0275,0.35,0.525-0.0275,0.378)
+grid.text("September", x= 0.605-0.0275, y = 0.345, just = "left", gp = gpar(cex = 0.8))
+
+draw2(x = 0.575-0.0275, y = 0.413, 
+     size = data.TOR$perc[14], color = "yellow")
+draw_arrow(0.61-0.0275,0.413,0.575-0.0275,0.413)
+grid.text("17:00-18:00", x= 0.615-0.0275, y = 0.413, just = "left",
+          gp = gpar(cex = 0.8))
+
+draw2(x = 0.46-0.0275, y = 0.14, 
+     size = data.TOR$perc[3], color = "green")
+
+draw_arrow(0.41-0.0275,0.14,0.46-0.0275,0.14)
+grid.text("Improper Turn", x= 0.405-0.0275, y = 0.14, just = "right", gp = gpar(cex = 0.8))
+
+draw2(x = 0.52-0.0275, y = 0.205, 
+     size = data.TOR$perc[6], color = "green")
+draw_arrow(0.58-0.0275,0.23,0.52-0.0275,0.205)
+grid.text("Scarborough", x= 0.585-0.0275, y = 0.235, just = "left",
+          gp = gpar(cex = 0.8))
+
+draw2(x = 0.57-0.0275, y = 0.14, 
+     size = data.TOR$perc[9], color = "green")
+draw_arrow(0.62-0.0275,0.14,0.57-0.0275,0.14)
+grid.text("Motorcycle", x= 0.625-0.0275, y = 0.14, just = "left",
+          gp = gpar(cex = 0.8))
+
+draw2(x = 0.52-0.0275, y = 0.107, 
+     size = data.TOR$perc[12], color = "green")
+draw_arrow(0.58-0.0275,0.087,0.52-0.0275,0.107)
+grid.text("June", x= 0.585-0.0275, y = 0.082, just = "left", gp = gpar(cex = 0.8))
+
+draw2(x = 0.45-0.0275, y = 0.21, 
+     size = data.TOR$perc[15], color = "green")
+draw_arrow(0.4-0.0275,0.21,0.45-0.0275,0.21)
+grid.text("15:00-16:00", x= 0.395-0.0275, y = 0.21, just = "right", gp = gpar(cex = 0.8))
+
+```
+
+*Figure 14.* This plot shows the relative frequencies of the top three contributors of each of five factors for crashes in Toronto. The red circles are the largest contributors, the yellow circles are the second largest contributors, and the green circles are the third largest contributors. The sizes of the circles are proportional to their relative impacts on crashes in Toronto.
+
+These plots all highlight various aspects of our data that give us a better understanding of the anatomy of crashes in New York City and Toronto. The time of day, borough, vehicle type, and more are all factors of a crash that come together in various ways to form our dataset. We have determined that the time of day certainly has an influence on the number of crashes that occur and also in how deadly they might be. Further, we have deduced that most crashes are a result of driver error, such as distracted driving or disobeying safety laws, and not the result of mechanical failure or other external factors.
+
+\newpage
+
+## Modeling
+
+For our modeling, we chose to investigate the statistical link between the time of the day and the frequency of crashes. The model regresses the total number of crashes happening every quarter on a categorical variable that represents the time of a day. We categorize the 24 hours of a day into six time periods, namely 00:00 to 04:00 (late night), 04:00 to 08:00 (early morning), 08:00 to 12:00 (morning), 12:00 to 16:00 (afternoon), 16:00 to 20:00 (early evening), and 20:00 to 24:00 (evening). Our assumptions for the model include:
+
+1\) Linear relationship between time periods and crashes
+
+2\) Crashes in different time periods are independent
+
+3\) Variability of the number of crashes are similar across time 
+
+4\) No linear relationship between explanatory variables
+
+5\) No correlation between errors and explanatory variables
+
+6\) Time periods specification is appropriate.
+
+Based on the model assumptions, we want to test if there's statistical evidence of certain time periods having more (or less) crashes taking place than the others.
+
+```{r message=FALSE, warning=FALSE}
+library(knitr)
+library(RSQLite)
+
+if(file.exists("/Users/samhitavinay/Desktop/STAT405/crashes.db") == FALSE) {
+  dcon <- dbConnect(SQLite(), 
+                    dbname = "/Users/samhitavinay/Desktop/STAT405/crashes.db")
+  dbWriteTable(dcon, "crashes", read_csv("crashes.csv"))
+  } else {
+  dcon <- dbConnect(SQLite(), 
+                    dbname = "/Users/samhitavinay/Desktop/STAT405/crashes.db")
+  }
+
+library(lubridate)
+library(dplyr)
+
+res <- dbSendQuery(conn = dcon,
+"SELECT *
+FROM crashes;")
+overallquery <- dbFetch(res, -1)
+dbClearResult(res)
+
+data <- overallquery
+
+data$CRASH.TIME <- as.POSIXlt(data$CRASH.TIME,format="%H:%M")
+data$CRASH.TIME <- with(data, 
+                        sprintf("%02d:%02d:%02d", 
+                                CRASH.TIME$hour, CRASH.TIME$min, 
+                                CRASH.TIME$sec))
+
+interval <- function(time) {
+  hours <- as.integer(substr(time, 1, 2))
+  minutes <- as.integer(substr(time, 4, 5))
+  rounded_minutes <- floor(minutes/15) * 15
+  sprintf('%02d:%02d:00', hours, rounded_minutes)
+}
+
+summary <- data %>%
+  mutate(interval_start = sapply(CRASH.TIME, interval)) %>%
+  group_by(interval_start) %>%
+  summarize(count = n())
+
+summary <- summary %>%
+  mutate(
+    group = case_when(
+      (interval_start >= "00:00:00" & interval_start < "04:00:00") ~ " late night",
+      (interval_start >= "04:00:00" & interval_start < "08:00:00") ~ " early morning",
+      (interval_start >= "08:00:00" & interval_start < "12:00:00") ~ " morning",
+      (interval_start >= "12:00:00" & interval_start < "16:00:00") ~ " afternoon",
+      (interval_start >= "16:00:00" & interval_start < "20:00:00") ~ " early evening",
+      (interval_start >= "20:00:00" & interval_start <= "23:59:00") ~ " evening",
+    )
+  )
+
+summary$group <- as.factor(summary$group)
+result <- summary %>%
+  group_by(group) %>%
+  summarize(average = mean(count, na.rm = TRUE))
+
+lm <- lm(count ~ group, data = summary)
+```
+
+**Table 1:**
+
+Regression Data for each Time Group
+
+```{r message=FALSE, warning=FALSE}
+
+library(flextable)
+
+summarized <- summary(lm)$coefficients
+
+formattedLast <- formatC(summarized[,"Pr(>|t|)"], format = "e", digits = 3)
+summarized[,"Pr(>|t|)"] <- formattedLast
+
+summarized <- as.data.frame(summarized)
+titles <- c("Groups", colnames(summarized))
+summarized <- cbind(c("afternoon (12-16)", "early evening (16-20)", "early morning (4-8)", "evening (20-24)", "late night (0-4)", "morning (8-12)"), summarized)
+colnames(summarized) <- titles
+
+summarized$`t value` <- round(as.numeric(summarized$`t value`), 3)
+summarized$`Std. Error` <- round(as.numeric(summarized$`Std. Error`), 3)
+summarized$`Estimate` <- round(as.numeric(summarized$`Estimate`), 3)
+
+ft <- flextable(summarized)
+ft <- align(ft, i = 1, j = NULL, align = "center", part = "header")
+ft <- align(ft, align = "center")
+ft <- width(ft, width = 1.3)
+ft <- fontsize(ft, size = 10, part = "all")
+
+ft
+```
+
+This table summarizes the results for the linear regression on crashes during each time of day. This shows the estimate, standard error, t-value, and the probability of being greater than the t-value for each time period: late night, early morning, morning, afternoon, early evening, and evening.
+
+The regression model sets the period "afternoon" as the default category. Hence, all comparisons are between "afternoon" and the other periods. As the summary chart shows, there's statistically significant evidence that the number of crashes happening during "early morning", "evening", and "late night" are greatly lower than the "afternoon" period, as their corresponding p-values are infinitely close to zero. The difference between the numbers of crashes happening during "early evening" and during "afternoon" is quite insignificant, and the difference between "morning" and "afternoon" is more significant but is still rejected on a 5% significance level. Overall, the result shows that crashes happening from 20:00 to 08:00 the next day (when the traffic is typically less busy) are less than crashes happening from 08:00 to 20:00 (when the traffic is typically more busy).
+
+## Conclusion
+
+As we have seen, there is strong statistical evidence for the time of day playing a large role in the frequency of crashes during the day. Further, we have seen that crashes are deadlier at different times of day, such as the very early morning, which we assume is the result of many different factors affecting driving at 3 AM. We have not found any evidence for the type of vehicle being a significant factor in the likelihood that the vehicle will be involved in a crash, but more statistical investigation against the population of vehicles in the city would be necessary to draw conclusions. Further, we have found that COVID and work from home policies have more than likely played a role in reducing the number of crashes that occur every year, as fewer cars are on the road nowadays as compared to years where the total number of crashes was much greater. More work will be needed to investigate whether or not a person on the road is more likely to be involved in a crash before or after COVID, as we do not have data on the total population of motorists between the two time frames. It would be useful to determine whether drivers relative skills were better or worse during COVID, and which types of people were on the roads during each time. This would have required several more datasets that we did not have access to, though it would have certainly added a number of interesting factors to consider. Perhaps we can conduct this type of analysis in the future. Overall, the trend of COVID having an extreme impact on the number of total crashes in NYC, and the fact that the reason that these crashes occur is almost entirely based on user error and driver failure should allow any officials to make educated decisions regarding where to send resources to mitigate these crashes. We suggest more driver education and heightened caution as more and more individuals return from working at home and the streets become more filled.
+
+\newpage
+
+## References
+
+City of New York. (2023). *Motor Vehicle Collisions - Crashes* \[Data set\]. https://catalog.data.gov/dataset/motor-vehicle-collisions-crashes
+
+City of Toronto (2023). Motor Vehicle Collisions involving Killed or Seriously Injured Persons \[Data set\]. https://open.toronto.ca/dataset/motor-vehicle-collisions-involving-killed-or-seriously-injured-persons/
+
+Fell, J. C., Freedman, M., Page, J. F., Bellis, E. S., Scheifflee, T. G., Hendricks, S. L., Steinberg, G. V., &; Lee, K. C. (1999). \*Background\*. The Relative Frequency of Unsafe Driving Acts in Serious Traffic Crashes. https://one.nhtsa.gov/people/injury/research/udashortrpt/background.html
